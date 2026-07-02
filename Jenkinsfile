@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         IMAGE_NAME = "mad0008271/company-website"
-        IMAGE_TAG = "latest"
+        IMAGE_TAG  = "latest"
     }
 
     stages {
@@ -16,7 +16,7 @@ pipeline {
             }
         }
 
-        stage('Test Docker Login') {
+        stage('Docker Login') {
             steps {
                 withCredentials([
                     usernamePassword(
@@ -26,9 +26,7 @@ pipeline {
                     )
                 ]) {
                     bat '''
-                    docker logout
                     echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    docker info
                     '''
                 }
             }
@@ -45,12 +43,14 @@ pipeline {
 
     post {
         success {
-            echo 'Pipeline completed successfully!'
-            bat 'docker logout'
+            echo 'Docker image built and pushed successfully!'
         }
 
         failure {
             echo 'Pipeline failed!'
+        }
+
+        always {
             bat 'docker logout'
         }
     }
