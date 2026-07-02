@@ -3,16 +3,20 @@ pipeline {
 
     environment {
         IMAGE_NAME = "mad0008271/company-website"
-        IMAGE_TAG  = "latest"
+        IMAGE_TAG = "latest"
     }
 
     stages {
 
+        stage('Checkout Source') {
+            steps {
+                checkout scm
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
-                bat '''
-                docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
-                '''
+                bat "docker build -t %IMAGE_NAME%:%IMAGE_TAG% ."
             }
         }
 
@@ -34,24 +38,40 @@ pipeline {
 
         stage('Push Docker Image') {
             steps {
-                bat '''
-                docker push %IMAGE_NAME%:%IMAGE_TAG%
-                '''
+                bat "docker push %IMAGE_NAME%:%IMAGE_TAG%"
+            }
+        }
+
+        stage('Verify Image') {
+            steps {
+                bat "docker images"
+            }
+        }
+
+        stage('Docker Logout') {
+            steps {
+                bat "docker logout"
+            }
+        }
+
+        stage('Cleanup Local Image') {
+            steps {
+                bat "docker image rm %IMAGE_NAME%:%IMAGE_TAG% || exit /b 0"
             }
         }
     }
 
     post {
         success {
-            echo 'Docker image built and pushed successfully!'
+            echo '✅ Docker image built and pushed successfully!'
         }
 
         failure {
-            echo 'Pipeline failed!'
+            echo '❌ Pipeline failed!'
         }
 
         always {
-            bat 'docker logout'
+            bat 'docker logout || exit /b 0'
         }
     }
 }
