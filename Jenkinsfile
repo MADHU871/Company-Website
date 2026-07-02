@@ -1,22 +1,35 @@
 pipeline {
     agent any
 
+    triggers {
+        // Poll every 5 minutes (optional)
+        pollSCM('H/5 * * * *')
+
+        // If using GitHub webhook, remove pollSCM
+        // githubPush()
+    }
+
     environment {
         IMAGE_NAME = "mad0008271/company-website"
-        IMAGE_TAG = "latest"
+        IMAGE_TAG  = "latest"
+        CONTAINER  = "company-website-container"
     }
 
     stages {
 
         stage('Checkout Source') {
             steps {
+                echo "Checking out source code..."
                 checkout scm
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                bat "docker build -t %IMAGE_NAME%:%IMAGE_TAG% ."
+                echo "Building Docker Image..."
+                bat """
+                docker build -t %IMAGE_NAME%:%IMAGE_TAG% .
+                """
             }
         }
 
@@ -29,20 +42,82 @@ pipeline {
                         passwordVariable: 'DOCKER_PASS'
                     )
                 ]) {
-                    bat '''
+                    bat """
                     echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin
-                    '''
+                    """
                 }
             }
         }
 
-        stage('Push Docker Image') {
+        stage('Tag Image') {
             steps {
-                bat "docker push %IMAGE_NAME%:%IMAGE_TAG%"
+                echo "Tagging image..."
+                bat """
+                docker tag %IMAGE_NAME%:%IMAGE_TAG% %IMAGE_NAME%:%BUILD_NUMBER%
+                """
             }
         }
 
-        stage('Verify Image') {
+        stage('Push Latest Image') {
+            steps {
+                echo "Pushing latest image..."
+                bat """
+                docker push %IMAGE_NAME%:%IMAGE_TAG%
+                """
+            }
+        }
+
+        stage('Push Version Image') {
+            steps {
+                echo "Pushing version image..."
+                bat """
+                docker push %IMAGE_NAME%:%BUILD_NUMBER%
+                """
+            }
+        }
+
+        stage('Verify Push') {
+            steps {
+                echo "Pulling image from Docker Hub..."
+                bat """
+                docker pull %IMAGE_NAME%:%IMAGE_TAG%
+                """
+            }
+        }
+
+        stage('Stop Old Container') {
+            steps {
+                bat """
+                docker stop %CONTAINER% || exit /b 0
+                docker rm %CONTAINER% || exit /b 0
+                """
+            }
+        }
+
+        stage('Run New Container') {
+            steps {
+                bat """
+                docker run -d ^
+                --name %CONTAINER% ^
+                -p 8080:80 ^
+                %IMAGE_NAME%:%IMAGE_TAG%
+                """
+            }
+        }
+
+        stage('Container Status') {
+            steps {
+                bat "docker ps"
+            }
+        }
+
+        stage('Container Logs') {
+            steps {
+                bat "docker logs %CONTAINER%"
+            }
+        }
+
+        stage('Docker Images') {
             steps {
                 bat "docker images"
             }
@@ -53,25 +128,29 @@ pipeline {
                 bat "docker logout"
             }
         }
-
-        stage('Cleanup Local Image') {
-            steps {
-                bat "docker image rm %IMAGE_NAME%:%IMAGE_TAG% || exit /b 0"
-            }
-        }
     }
 
     post {
+
         success {
-            echo '✅ Docker image built and pushed successfully!'
+            echo "=================================="
+            echo "Pipeline completed successfully."
+            echo "Image pushed to Docker Hub."
+            echo "Container deployed successfully."
+            echo "=================================="
         }
 
         failure {
-            echo '❌ Pipeline failed!'
+            echo "=================================="
+            echo "Pipeline failed."
+            echo "Check the failed stage in the Jenkins console."
+            echo "=================================="
         }
 
         always {
-            bat 'docker logout || exit /b 0'
+            bat """
+            docker logout || exit /b 0
+            """
         }
     }
 }
